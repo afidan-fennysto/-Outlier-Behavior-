@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>De-Influence AI · Fast-Fashion Regret Predictor</title>
+<link rel="manifest" href="/static/manifest.webmanifest" />
+<meta name="theme-color" content="#3a1182" />
+<style>
+  :root {
+    --bg: #0b0b14; --card: #15152400; --panel: #171728; --line: #2a2a40;
+    --txt: #eef0ff; --muted: #9aa0c2; --accent: #7c4dff; --accent2: #c23bff;
+    --good: #22c58b; --warn: #ffb020; --bad: #ff4d6d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #2a1150 0%, transparent 60%),
+                radial-gradient(900px 500px at -10% 110%, #7a1b6e33 0%, transparent 55%), var(--bg);
+    color: var(--txt); min-height: 100vh;
+  }
+  header {
+    padding: 22px 28px; display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(90deg, #3a1182 0%, #c2143a 100%);
+  }
+  header .logo { font-size: 26px; font-weight: 800; letter-spacing: .5px; }
+  header .sub { color: #ffffffcc; font-size: 13px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 26px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .pcard {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    cursor: pointer; transition: .15s; position: relative;
+  }
+  .pcard:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .pcard .emoji { font-size: 30px; }
+  .pcard .pname { font-weight: 600; margin: 8px 0 4px; font-size: 14px; }
+  .pcard .meta { color: var(--muted); font-size: 12px; }
+  .pcard .price { margin-top: 8px; font-weight: 700; color: var(--accent2); }
+  .platform { position: absolute; top: 12px; right: 12px; font-size: 10px; padding: 3px 8px;
+    border-radius: 20px; background: #ffffff14; color: var(--muted); }
+  .scanbar { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .scanbar input { flex:1; min-width:240px; background:var(--panel); border:1px solid var(--line);
+    color:var(--txt); padding:12px 14px; border-radius:10px; font-size:14px; }
+  button.go { background: linear-gradient(90deg,var(--accent),var(--accent2)); color:#fff; border:0;
+    padding:12px 20px; border-radius:10px; font-weight:700; cursor:pointer; font-size:14px; }
+  button.go:disabled { opacity:.5; cursor:default; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  /* result */
+  #result { margin-top: 10px; }
+  .verdict {
+    display:flex; gap:22px; align-items:center; background:var(--panel);
+    border:1px solid var(--line); border-radius:16px; padding:22px; flex-wrap:wrap;
+  }
+  .gauge { width:150px; height:150px; position:relative; flex:0 0 auto; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .val { position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; }
+  .gauge .num { font-size:34px; font-weight:800; }
+  .gauge .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .verdict .head { flex:1; min-width:240px; }
+  .pill { display:inline-block; padding:6px 14px; border-radius:30px; font-weight:800; font-size:14px; letter-spacing:.5px; }
+  .pill.KEEP { background:#113a2b; color:var(--good); }
+  .pill.CONSIDER { background:#3a3411; color:var(--warn); }
+  .pill.CAUTION { background:#3a2a11; color:#ff8a3d; }
+  .pill.AVOID { background:#3a1120; color:var(--bad); }
+  .reasons { margin:14px 0 0; padding-left:18px; color:var(--txt); }
+  .reasons li { margin:5px 0; font-size:14px; }
+
+  .cards3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-top:14px; }
+  .ecard { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .ecard h3 { margin:0 0 4px; font-size:14px; }
+  .ecard .tag { font-size:11px; color:var(--muted); }
+  .big { font-size:30px; font-weight:800; margin:10px 0 2px; }
+  .bar { height:8px; border-radius:6px; background:#ffffff14; overflow:hidden; margin:10px 0; }
+  .bar > span { display:block; height:100%; border-radius:6px; }
+  .kv { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin:4px 0; }
+  .kv b { color:var(--txt); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { font-size:11px; padding:4px 9px; border-radius:20px; background:#ff4d6d22; color:#ff9db0; }
+  .spark { display:flex; align-items:flex-end; gap:3px; height:48px; margin-top:8px; }
+  .spark i { flex:1; background:linear-gradient(180deg,var(--accent2),var(--accent)); border-radius:2px 2px 0 0; }
+  .loading { color:var(--muted); padding:20px; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:24px; }
+  .err { color: var(--bad); padding: 12px 0; }
+
+  .conf { display:inline-block; margin-left:10px; padding:5px 12px; border-radius:30px;
+    font-size:11px; font-weight:700; letter-spacing:.5px; vertical-align:middle; }
+  .conf-high { background:#113a2b; color:var(--good); }
+  .conf-medium { background:#3a3411; color:var(--warn); }
+  .conf-low { background:#3a1120; color:var(--bad); }
+
+  .explain { background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:18px; margin-top:14px; }
+  .explain h3 { margin:0; font-size:14px; }
+  table.breakdown { width:100%; border-collapse:collapse; font-size:13px; }
+  table.breakdown th { text-align:left; color:var(--muted); font-weight:600; padding:6px 8px;
+    border-bottom:1px solid var(--line); }
+  table.breakdown td { padding:6px 8px; border-bottom:1px solid var(--line); }
+
+  .disclaimer { background:#1a1230; border:1px solid var(--line); border-left:4px solid var(--accent);
+    border-radius:10px; padding:14px 18px; margin-top:14px; font-size:13px; color:var(--muted); }
+  .disclaimer b { color:var(--txt); }
+  .disclaimer ul { margin:8px 0 0; padding-left:18px; }
+  .disclaimer li { margin:4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🛡️ De-Influence AI</div>
+  <div class="sub">Micro-Trend Lifespan &amp; Fast-Fashion Regret Predictor · <b>Outlier Behaviour</b></div>
+</header>
+
+<div class="wrap">
+  <h2>1. Upload a review sheet (recommended)</h2>
+  <div class="scanbar">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+    <button class="go" id="uploadBtn">Analyze file</button>
+  </div>
+  <div class="hint">Upload a cleaned CSV/Excel of a product's reviews (optionally a search-velocity series).
+    This is the reliable, terms-of-service-safe way to feed real data into the prototype.
+    A ready sample lives at <code>app/data/sample_upload.xlsx</code>.</div>
+
+  <h2>2. Check a link (experimental)</h2>
+  <div class="scanbar">
+    <input id="urlInput" placeholder="Paste a public product URL (Shopee/TikTok are blocked by design)" />
+    <button class="go" id="linkBtn">Check link</button>
+  </div>
+  <div class="hint">Best-effort public fetch. Shopee / TikTok Shop load items in-app behind login and
+    bot protection, so a server-side read is unreliable and against their terms — the tool says so
+    honestly and never invents reviews. For those, use the upload option above.</div>
+
+  <h2>3. Try a demo item</h2>
+  <div class="scanbar">
+    <input id="demoInput" placeholder="Type tiktok / shopee / shein to pick a sample" />
+    <button class="go" id="scanBtn">Scan demo</button>
+  </div>
+  <div class="grid" id="catalogue"></div>
+
+  <div id="result"></div>
+
+  <h2>Model Validation</h2>
+  <p class="hint" style="margin:-4px 0 4px">Measured on a small hand-labeled set. Numbers are a prototype sanity check, not a guarantee.</p>
+  <div id="validation"><div class="loading">Loading metrics…</div></div>
+</div>
+
+<footer>De-Influence AI MVP · Dual-signal engine: Gompertz hype-decay × localized Malaysian defect NLP × Cost-Per-Wear</footer>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+function scoreColor(v, invert=false) {
+  const good = getComputedStyle(document.documentElement).getPropertyValue('--good');
+  const warn = getComputedStyle(document.documentElement).getPropertyValue('--warn');
+  const bad  = getComputedStyle(document.documentElement).getPropertyValue('--bad');
+  const score = invert ? 100 - v : v;
+  if (score >= 66) return good.trim();
+  if (score >= 40) return warn.trim();
+  return bad.trim();
+}
+
+function gauge(value, label, invert=false) {
+  const r = 62, c = 2 * Math.PI * r, off = c * (1 - value / 100);
+  const col = scoreColor(value, invert);
+  return `<div class="gauge">
+    <svg width="150" height="150">
+      <circle cx="75" cy="75" r="${r}" stroke="#ffffff14" stroke-width="12" fill="none"/>
+      <circle cx="75" cy="75" r="${r}" stroke="${col}" stroke-width="12" fill="none"
+        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/>
+    </svg>
+    <div class="val"><div class="num" style="color:${col}">${value.toFixed(0)}</div>
+    <div class="lbl">${label}</div></div></div>`;
+}
+
+async function loadCatalogue() {
+  const res = await fetch('/api/products');
+  const items = await res.json();
+  $('#catalogue').innerHTML = items.map(p => `
+    <div class="pcard" data-id="${p.id}">
+      <span class="platform">${p.platform}</span>
+      <div class="emoji">${p.image_hint}</div>
+      <div class="pname">${p.name}</div>
+      <div class="meta">${p.category}</div>
+      <div class="price">${p.currency}${p.price.toFixed(2)}</div>
+    </div>`).join('');
+  document.querySelectorAll('.pcard').forEach(el =>
+    el.addEventListener('click', () => scanById(el.dataset.id)));
+}
+
+async function scanById(id) {
+  $('#result').innerHTML = '<div class="loading">Analyzing hype decay, defect sentiment and cost-per-wear…</div>';
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ product_id: id })
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Scan failed');
+    render(await res.json());
+  } catch (e) {
+    $('#result').innerHTML = `<div class="err">⚠️ ${e.message}</div>`;
+  }
+}
+
+function render(d) {
+  const h = d.hype, df = d.defects, tc = d.truecost;
+  const spark = h.fitted_params ? '' : '';
+  const velBars = (window.__lastVelocity || []); // not sent; show hype phase instead
+  const chips = (df.top_defects || []).map(x =>
+    `<span class="chip">${x.phrase} ×${x.mentions}</span>`).join('') || '<span class="hint">No defect phrases detected</span>';
+
+  $('#result').innerHTML = `
+    <h2>Verdict · ${d.product_name}</h2>
+    <div class="verdict">
+      ${gauge(d.longevity_score, 'Longevity')}
+      ${gauge(d.regret_probability, 'Regret %', true)}
+      <div class="head">
+        <span class="pill ${d.recommendation}">${d.recommendation}</span>
+        <span class="conf conf-${d.confidence}">${d.confidence.toUpperCase()} confidence</span>
+        <p style="margin:12px 0 0;font-size:15px">${d.headline}</p>
+        <ul class="reasons">${d.reasons.map(r => `<li>${r}</li>`).join('')}</ul>
+      </div>
+    </div>
+
+    <div class="explain">
+      <h3>🧮 How we calculated the longevity score</h3>
+      <p class="hint" style="margin:6px 0 10px">${d.how_we_calculated}</p>
+      <table class="breakdown">
+        <tr><th>Signal</th><th>Health</th><th>Weight</th><th>Points</th></tr>
+        ${d.score_breakdown.map(s => `<tr>
+          <td>${s.signal}</td><td>${s.health}/100</td>
+          <td>${(s.weight*100).toFixed(0)}%</td><td><b>${s.points}</b></td></tr>`).join('')}
+      </table>
+    </div>
+
+    <div class="cards3">
+      <div class="ecard">
+        <h3>📉 Hype-Cycle Decay</h3>
+        <div class="tag">Gompertz trend-lifespan forecast</div>
+        <div class="big" style="color:${scoreColor(h.hype_health)}">${h.phase.toUpperCase()}</div>
+        <div class="bar"><span style="width:${h.hype_health}%;background:${scoreColor(h.hype_health)}"></span></div>
+        <div class="kv"><span>Hype health</span><b>${h.hype_health}/100</b></div>
+        <div class="kv"><span>Decay velocity</span><b>${(h.decay_velocity*100).toFixed(0)}%/2wk</b></div>
+        <div class="kv"><span>Relevance left</span><b>~${h.remaining_life_days.toFixed(0)} days</b></div>
+        <div class="kv"><span>Peak @ day</span><b>${h.peak_day.toFixed(1)}</b></div>
+      </div>
+
+      <div class="ecard">
+        <h3>🔍 Localized Defect NLP</h3>
+        <div class="tag">Malaysian code-switch sentiment · ${df.reviews_analyzed} reviews</div>
+        <div class="big" style="color:${scoreColor(df.quality_health)}">${df.quality_health}</div>
+        <div class="bar"><span style="width:${df.quality_health}%;background:${scoreColor(df.quality_health)}"></span></div>
+        <div class="kv"><span>Defect rate</span><b>${(df.defect_rate*100).toFixed(0)}%</b></div>
+        <div class="kv"><span>Severity</span><b>${df.severity_score}/100</b></div>
+        <div class="kv"><span>Star-inflation gap</span><b>${df.rating_gap>0.1?'⚠ inflated':'ok'}</b></div>
+        <div class="chips">${chips}</div>
+      </div>
+
+      <div class="ecard">
+        <h3>💸 TrueCost Simulator</h3>
+        <div class="tag">Real-time Cost-Per-Wear</div>
+        <div class="big" style="color:${tc.verdict==='excellent'||tc.verdict==='fair'?'var(--good)':'var(--bad)'}">
+          ${tc.currency}${tc.cost_per_wear.toFixed(2)}<span style="font-size:14px;color:var(--muted)">/wear</span></div>
+        <div class="kv"><span>Sticker price</span><b>${tc.currency}${tc.price.toFixed(2)}</b></div>
+        <div class="kv"><span>Expected wears</span><b>${tc.expected_wears}</b></div>
+        <div class="kv"><span>Benchmark CPW</span><b>${tc.currency}${tc.benchmark_cpw.toFixed(2)}</b></div>
+        <div class="kv"><span>Verdict</span><b style="text-transform:capitalize">${tc.verdict}</b></div>
+        ${tc.savings_vs_benchmark>0
+          ? `<p class="hint" style="color:var(--bad)">Leaks ${tc.currency}${tc.savings_vs_benchmark.toFixed(2)}/wear vs a sustainable staple.</p>`
+          : `<p class="hint" style="color:var(--good)">Beats the sustainable-staple benchmark.</p>`}
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      <b>Responsible use</b>
+      <ul>${d.disclaimers.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>`;
+  $('#result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function loadValidation() {
+  try {
+    const res = await fetch('/api/evaluation');
+    const v = await res.json();
+    const dc = v.defect_classification, hf = v.hype_forecast;
+    $('#validation').innerHTML = `
+      <div class="cards3">
+        <div class="ecard">
+          <h3>🎯 Defect NLP — F1</h3>
+          <div class="big" style="color:var(--accent2)">${dc.f1_score.toFixed(2)}</div>
+          <div class="kv"><span>Precision</span><b>${dc.precision.toFixed(2)}</b></div>
+          <div class="kv"><span>Recall</span><b>${dc.recall.toFixed(2)}</b></div>
+          <div class="kv"><span>Accuracy</span><b>${dc.accuracy.toFixed(2)}</b></div>
+          <p class="hint">${dc.explanation}</p>
+        </div>
+        <div class="ecard">
+          <h3>📏 Hype forecast — MAE</h3>
+          <div class="big" style="color:var(--accent2)">${hf.mae.toFixed(1)}<span style="font-size:14px;color:var(--muted)"> days</span></div>
+          ${hf.per_case.map(c => `<div class="kv"><span>${c.name}</span><b>±${c.abs_error_days}d</b></div>`).join('')}
+          <p class="hint">${hf.explanation}</p>
+        </div>
+        <div class="ecard">
+          <h3>⚠️ Honest limitations</h3>
+          <ul class="reasons" style="font-size:13px">${v.caveats.map(c => `<li>${c}</li>`).join('')}</ul>
+        </div>
+      </div>`;
+  } catch (e) {
+    $('#validation').innerHTML = `<div class="err">Could not load validation: ${e.message}</div>`;
+  }
+}
+
+// --- Channel 3: demo item ---
+$('#scanBtn').addEventListener('click', async () => {
+  const res = await fetch('/api/products');
+  const items = await res.json();
+  const q = $('#demoInput').value.toLowerCase();
+  let pick = items[0];
+  if (q.includes('tiktok')) pick = items.find(p => p.platform === 'TikTok Shop') || pick;
+  else if (q.includes('shopee')) pick = items.find(p => p.platform === 'Shopee') || pick;
+  else if (q.includes('shein')) pick = items.find(p => p.platform === 'Shein') || pick;
+  scanById(pick.id);
+});
+
+// --- Channel 1: file upload (CSV / Excel) ---
+$('#uploadBtn').addEventListener('click', async () => {
+  const f = $('#fileInput').files[0];
+  if (!f) { $('#result').innerHTML = '<div class="err">Choose a .xlsx or .csv file first.</div>'; return; }
+  $('#result').innerHTML = '<div class="loading">Parsing file and running the analysis…</div>';
+  try {
+    const form = new FormData();
+    form.append('file', f);
+    const res = await fetch('/api/scan-upload', { method: 'POST', body: form });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed');
+    render(await res.json());
+  } catch (e) {
+    $('#result').innerHTML = `<div class="err">⚠️ ${e.message}</div>`;
+  }
+});
+
+// --- Channel 2: experimental link check ---
+$('#linkBtn').addEventListener('click', async () => {
+  const url = $('#urlInput').value.trim();
+  if (!url) { $('#result').innerHTML = '<div class="err">Paste a URL first.</div>'; return; }
+  $('#result').innerHTML = '<div class="loading">Fetching the public page…</div>';
+  try {
+    const res = await fetch('/api/check-link', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url })
+    });
+    const d = await res.json();
+    if (d.scan) { render(d.scan); return; }
+    // No analysable data: show the honest explanation rather than fake a result.
+    $('#result').innerHTML = `
+      <div class="disclaimer" style="border-left-color:var(--warn)">
+        <b>Link check result</b>
+        <ul>
+          <li>Reachable: ${d.reachable ? 'yes' : 'no'}</li>
+          ${d.extracted_name ? `<li>Detected name: ${d.extracted_name}</li>` : ''}
+          ${d.extracted_price ? `<li>Detected price: RM${d.extracted_price}</li>` : ''}
+          <li>${d.note}</li>
+        </ul>
+      </div>`;
+  } catch (e) {
+    $('#result').innerHTML = `<div class="err">⚠️ ${e.message}</div>`;
+  }
+});
+
+loadCatalogue();
+loadValidation();
+
+// Register the service worker so the dashboard is an installable web app (PWA).
+// This is our prototype answer to reaching app-based shoppers without a Chrome extension:
+// they can "Add to Home screen" and even share a product INTO this app via the share target.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+// If the app was opened via the Web Share Target, prefill the link box.
+const shared = new URLSearchParams(location.search);
+if (shared.get('shared')) {
+  const u = shared.get('url') || shared.get('text') || '';
+  if (u) { $('#urlInput').value = u; }
+}
+</script>
+</body>
+</html>

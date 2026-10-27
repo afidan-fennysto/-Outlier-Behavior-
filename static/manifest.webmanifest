@@ -1,0 +1,27 @@
+{
+  "name": "De-Influence AI",
+  "short_name": "De-Influence",
+  "description": "Micro-Trend Lifespan & Fast-Fashion Regret Predictor. Check an item before you impulse-buy.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0b14",
+  "theme_color": "#3a1182",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/?shared=1",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
