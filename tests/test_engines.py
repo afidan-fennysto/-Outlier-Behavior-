@@ -155,10 +155,12 @@ def test_api_unknown_product_404():
     assert r.status_code == 404
 
 
-# --------------------------- Validation / metrics ---------------------------
+# --------------------------- Validation / metrics (real benchmark) ---------------------------
 from app.evaluation import (  # noqa: E402
+    evaluate_baseline_rule,
     evaluate_defect_classifier,
     evaluate_hype_forecaster,
+    evaluate_per_defect_type,
     run_full_evaluation,
 )
 from app.ethics import (  # noqa: E402
@@ -169,13 +171,24 @@ from app.ethics import (  # noqa: E402
 )
 
 
-def test_defect_f1_is_reasonable():
+def test_defect_classifier_tallies_on_benchmark():
     m = evaluate_defect_classifier()
-    # On the labeled set the detector should be clearly better than chance.
-    assert 0.0 <= m.f1_score <= 1.0
+    # Benchmark has 50 rows (16 defect / 34 no-defect). Our detector should beat chance
+    # and, importantly, beat the dataset's own baseline rule.
+    assert m.n == 50
     assert m.f1_score >= 0.6
+    baseline = evaluate_baseline_rule()
+    assert m.f1_score >= baseline.f1_score  # our model is at least as good as the baseline
     assert m.n == m.true_positives + m.false_positives + m.true_negatives + m.false_negatives
-    assert m.explanation
+
+
+def test_per_defect_type_recall_reported():
+    buckets = evaluate_per_defect_type()
+    # All four benchmark defect types should be present with a recall figure.
+    assert set(buckets) >= {"Fabric Sheerness", "Stitching Defect",
+                            "Sizing Mismatch", "Thermal Discomfort"}
+    for b in buckets.values():
+        assert 0.0 <= b["recall"] <= 1.0
 
 
 def test_hype_mae_is_computed():
@@ -190,7 +203,9 @@ def test_hype_mae_is_computed():
 def test_full_evaluation_has_caveats():
     report = run_full_evaluation()
     assert report.caveats
-    assert any("label" in c.lower() or "prototype" in c.lower() for c in report.caveats)
+    assert report.dataset_source
+    assert report.baseline_rule is not None
+    assert any("benchmark" in c.lower() or "synthetic" in c.lower() for c in report.caveats)
 
 
 # --------------------------- Ethics / responsible use ---------------------------
@@ -238,91 +253,214 @@ def test_evaluation_endpoint():
     assert 0.0 <= body["defect_classification"]["f1_score"] <= 1.0
     assert body["hype_forecast"]["mae"] >= 0.0
     assert body["caveats"]
+    assert body["baseline_rule"] is not None
+    assert body["per_defect_type"]
 
 
-# --------------------------- Ingestion (CSV / Excel upload) ---------------------------
-from app.ingestion import IngestionError, parse_csv, parse_excel, parse_upload  # noqa: E402
-from app.link_fetch import fetch_link  # noqa: E402
-
-
-def _csv_bytes(text: str) -> bytes:
-    return text.encode("utf-8")
-
-
-def test_parse_csv_reviews():
-    csv = "text,rating\nkain nipis cepat rosak,1\nberbaloi tebal,5\n"
-    product = parse_csv(_csv_bytes(csv))
-    assert len(product["reviews"]) == 2
-    assert product["reviews"][0]["rating"] == 1.0
-
-
-def test_parse_csv_requires_text_column():
-    try:
-        parse_csv(_csv_bytes("comment,stars\nhello,3\n"))
-        assert False, "expected IngestionError"
-    except IngestionError:
-        pass
-
-
-def test_parse_csv_drops_blank_rows():
-    csv = "text,rating\n  ,1\nreal review tebal,5\n"
-    product = parse_csv(_csv_bytes(csv))
-    assert len(product["reviews"]) == 1
-
-
-def test_parse_upload_rejects_unknown_type():
-    try:
-        parse_upload("data.txt", b"whatever")
-        assert False, "expected IngestionError"
-    except IngestionError:
-        pass
-
-
-def test_parse_sample_excel_if_present():
-    # The shipped sample workbook should parse into a product with reviews + velocity.
-    from pathlib import Path
-    xlsx = Path(__file__).resolve().parent.parent / "app" / "data" / "sample_upload.xlsx"
-    if not xlsx.exists():
-        return  # generated on demand; skip if not built yet
-    product = parse_excel(xlsx.read_bytes())
-    assert product["reviews"]
-    assert len(product["search_velocity"]) >= 6
-    assert product["price"] > 0
-
-
-def test_scan_upload_endpoint_with_csv():
-    csv = "text,rating\nkain gila nipis cepat rosak tak berbaloi,1\nmenyesal beli rugi,1\n"
-    files = {"file": ("reviews.csv", csv, "text/csv")}
+# --------------------------- CSV/Excel upload removed ---------------------------
+def test_scan_upload_endpoint_removed():
+    # Feature phased out: the endpoint must no longer exist.
+    files = {"file": ("reviews.csv", "text\nhello world kain nipis", "text/csv")}
     r = client.post("/api/scan-upload", files=files)
+    assert r.status_code in (404, 405)
+
+
+# --------------------------- Security (OWASP Top 10) ---------------------------
+def test_security_headers_present():
+    r = client.get("/api/health")
+    assert r.headers.get("X-Content-Type-Options") == "nosniff"
+    assert r.headers.get("X-Frame-Options") == "DENY"
+    assert "Content-Security-Policy" in r.headers
+    assert r.headers.get("Referrer-Policy") == "no-referrer"
+
+
+def test_link_check_does_not_fetch():
+    # A10 SSRF: /api/check-link resolves via SQLite only; it never makes an outbound request.
+    # A valid external product link returns a scan built from our own catalogue.
+    r = client.post("/api/check-link", json={"url": "https://shopee.com.my/x-i.1.2"})
+    assert r.status_code == 200
+    assert r.json()["scan"]["product_id"]
+
+
+def test_error_detail_is_sanitized():
+    from app.security import safe_detail
+    assert safe_detail(ValueError("Traceback (most recent call last): secret path")) \
+        == "Could not process the request."
+    assert safe_detail(ValueError("No usable review rows found.")) \
+        == "No usable review rows found."
+
+
+# --------------------------- Alternative suggestion ---------------------------
+def test_avoid_item_gets_alternative():
+    # The viral mesh top scores AVOID; the engine should propose a better catalogue item.
+    r = client.post("/api/scan", json={"product_id": "tiktok-viral-mesh-top"})
     assert r.status_code == 200
     body = r.json()
-    assert body["recommendation"] in ("KEEP", "CONSIDER", "CAUTION", "AVOID")
-    assert body["defects"]["reviews_analyzed"] == 2
+    assert body["recommendation"] in ("CAUTION", "AVOID")
+    assert body["alternative"] is not None
+    alt = body["alternative"]
+    assert alt["recommendation"] in ("KEEP", "CONSIDER")
+    assert alt["longevity_score"] >= body["longevity_score"] + 15
+    assert alt["product_id"] != "tiktok-viral-mesh-top"
 
 
-def test_scan_upload_bad_file_is_400():
-    files = {"file": ("notes.txt", "hello", "text/plain")}
-    r = client.post("/api/scan-upload", files=files)
+def test_good_item_has_no_alternative():
+    # A KEEP item should not carry an alternative suggestion.
+    r = client.post("/api/scan", json={"product_id": "shopee-basic-cotton-tee"})
+    assert r.status_code == 200
+    body = r.json()
+    if body["recommendation"] in ("KEEP", "CONSIDER"):
+        assert body["alternative"] is None
+
+
+# --------------------------- Validation dataset transparency ---------------------------
+def test_dataset_rows_endpoint():
+    r = client.get("/api/evaluation/dataset")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 50
+    assert {"id", "review_text", "human_label", "defect_type", "rule_prediction"} <= set(rows[0])
+
+
+def test_dataset_download_endpoint():
+    r = client.get("/api/evaluation/dataset/download")
+    assert r.status_code == 200
+    assert "spreadsheetml" in r.headers.get("content-type", "")
+    assert "attachment" in r.headers.get("content-disposition", "").lower()
+
+
+# --------------------------- Debug gating (OWASP A05) ---------------------------
+def test_debug_endpoint_hidden_by_default():
+    # Without DEINFLUENCE_DEBUG the endpoint must not exist.
+    r = client.get("/api/debug/snapshot")
+    assert r.status_code in (404, 405)
+
+
+def test_debug_snapshot_shape_when_built_directly():
+    # The snapshot builder itself (used only when debug is enabled) returns a safe structure.
+    from app.debug import full_snapshot
+    snap = full_snapshot()
+    assert "database" in snap and "engine_config" in snap
+    assert "tables" in snap["database"]
+
+
+# --------------------------- SQLite storage (feature #7) ---------------------------
+import app.db as db  # noqa: E402
+
+
+def test_db_seeded_catalogue():
+    products = db.list_products()
+    assert len(products) >= 4
+    ids = {p["id"] for p in products}
+    assert "tiktok-viral-mesh-top" in ids
+
+
+def test_db_upsert_and_get_roundtrip():
+    db.upsert_product({
+        "id": "test-roundtrip", "name": "Test Item", "category": "top", "price": 19.9,
+        "currency": "RM", "platform": "Test", "colour": "black", "style": "casual",
+        "in_stock": True, "search_velocity": [1, 2, 3], "source": "manual",
+    }, reviews=[{"text": "kain nipis cepat rosak", "rating": 1}])
+    got = db.get_product("test-roundtrip")
+    assert got is not None
+    assert got["colour"] == "black"
+    assert got["search_velocity"] == [1, 2, 3]
+    assert len(got["reviews"]) == 1
+    assert db.delete_product("test-roundtrip")
+
+
+# --------------------------- Preferences (feature #3) ---------------------------
+def test_preferences_persist_and_personalize():
+    r = client.post("/api/preferences", json={
+        "preferred_style": "streetwear", "favourite_colour": "black", "monthly_budget": 200,
+    })
+    assert r.status_code == 200
+    assert r.json()["favourite_colour"] == "black"
+
+    from app.personalization import personalized_note
+    note = personalized_note(
+        {"style": "streetwear", "colour": "black", "price": 20},
+        {"preferred_style": "streetwear", "favourite_colour": "black", "monthly_budget": 200},
+    )
+    assert note and "streetwear" in note and "black" in note
+
+
+def test_preferences_validation_caps_budget():
+    r = client.post("/api/preferences", json={"monthly_budget": 10_000_000})
+    assert r.status_code == 422  # pydantic rejects out-of-range budget (input validation)
+
+
+# --------------------------- Paste-a-link (emulated) ---------------------------
+def test_link_exact_demo_match():
+    # The seeded TikTok demo link should resolve to that exact product.
+    url = "https://www.tiktok.com/shop/pdp/viral-mesh-corset-top/1729"
+    r = client.post("/api/check-link", json={"url": url})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["matched"] is True
+    assert body["scan"]["product_id"] == "tiktok-viral-mesh-top"
+    assert body["platform"] == "TikTok Shop"
+
+
+def test_link_unknown_url_is_emulated_and_deterministic():
+    url = "https://shopee.com.my/some-random-item-i.99.88"
+    r1 = client.post("/api/check-link", json={"url": url})
+    r2 = client.post("/api/check-link", json={"url": url})
+    assert r1.status_code == 200 and r2.status_code == 200
+    b1, b2 = r1.json(), r2.json()
+    assert b1["matched"] is False
+    assert "emulated" in b1["note"].lower()
+    # Same link must map to the same product every time (deterministic).
+    assert b1["scan"]["product_id"] == b2["scan"]["product_id"]
+
+
+def test_link_no_server_fetch_for_internal_targets():
+    # Defence in depth (A10 SSRF): loopback/internal hosts are rejected, never fetched.
+    r = client.post("/api/check-link", json={"url": "http://127.0.0.1:8000/admin"})
     assert r.status_code == 400
 
 
-# --------------------------- Link fetch (experimental, honest) ---------------------------
-def test_link_fetch_blocks_known_platforms():
-    res = fetch_link("https://shopee.com.my/product/123")
-    assert res.reachable is False
-    assert "upload" in res.note.lower()
-    assert res.reviews == []
+def test_link_rejects_non_http_scheme():
+    r = client.post("/api/check-link", json={"url": "file:///etc/passwd"})
+    assert r.status_code == 400
 
 
-def test_link_fetch_rejects_non_url():
-    res = fetch_link("not a url")
-    assert res.reachable is False
+def test_ocr_endpoint_removed():
+    # OCR feature removed: endpoint must not exist.
+    files = {"file": ("x.png", b"\x89PNG\r\n\x1a\n", "image/png")}
+    r = client.post("/api/ocr", files=files)
+    assert r.status_code in (404, 405)
 
 
-def test_check_link_endpoint_returns_honest_note():
-    r = client.post("/api/check-link", json={"url": "https://tiktok.com/shop/item/1"})
+# --------------------------- Wishlist (feature #4) ---------------------------
+def test_wishlist_add_list_remove():
+    add = client.post("/api/wishlist", json={"product_id": "shopee-basic-cotton-tee",
+                                             "notify_on_restock": True})
+    assert add.status_code == 200
+    assert any(w["product"]["id"] == "shopee-basic-cotton-tee" for w in add.json())
+
+    rem = client.delete("/api/wishlist/shopee-basic-cotton-tee")
+    assert rem.status_code == 200
+    assert not any(w["product"]["id"] == "shopee-basic-cotton-tee" for w in rem.json())
+
+
+def test_wishlist_unknown_product_404():
+    r = client.post("/api/wishlist", json={"product_id": "nope-not-real"})
+    assert r.status_code == 404
+
+
+# --------------------------- Positioning (feature #5) ---------------------------
+def test_positioning_endpoint():
+    r = client.get("/api/positioning")
     assert r.status_code == 200
     body = r.json()
-    assert body["scan"] is None
-    assert body["reachable"] is False
-    assert body["note"]
+    assert body["comparison"] and body["value_props"]
+    assert "deinfluence" in body["columns"]
+
+
+# --------------------------- Link resolver (unit) ---------------------------
+def test_resolver_rejects_bad_urls():
+    from app.link_resolver import resolve_link
+    for bad in ["not a url", "ftp://x.com/a", "javascript:alert(1)", ""]:
+        resolved, product = resolve_link(bad)
+        assert resolved.ok is False and product is None

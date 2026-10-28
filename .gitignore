@@ -8,3 +8,9 @@ venv/
 
 # Logs / scratch
 *.log
+
+# Tunnel binary (downloaded on demand by scripts/run_tunnel.ps1)
+tools/
+
+# Local SQLite database (generated/seeded at runtime)
+app/data/*.db

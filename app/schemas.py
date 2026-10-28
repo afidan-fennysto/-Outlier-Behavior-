@@ -57,7 +57,22 @@ class TrueCostOut(BaseModel):
     savings_vs_benchmark: float
 
 
+class AlternativeOut(BaseModel):
+    """A better catalogue item suggested when the scanned product is CAUTION/AVOID."""
+    product_id: str
+    name: str
+    category: str
+    price: float
+    currency: str
+    platform: str
+    longevity_score: float
+    recommendation: str
+    cost_per_wear: float
+    reason: str
+
+
 class ScanResponse(BaseModel):
+    product_id: Optional[str] = None     # set when the product lives in the DB (wishlist/compare)
     product_name: str
     category: str
     longevity_score: float
@@ -71,6 +86,10 @@ class ScanResponse(BaseModel):
     # Responsible use: confidence level + disclaimers shown with every result.
     confidence: str
     disclaimers: List[str]
+    # Personalization: a tailored note when the item matches the user's saved preferences.
+    personalized_note: Optional[str] = None
+    # A better alternative from the catalogue, shown for CAUTION/AVOID verdicts.
+    alternative: Optional[AlternativeOut] = None
     hype: HypeForecastOut
     defects: DefectOut
     truecost: TrueCostOut
@@ -98,22 +117,11 @@ class RegressionMetricsOut(BaseModel):
 class EvaluationResponse(BaseModel):
     defect_classification: ClassificationMetricsOut
     hype_forecast: RegressionMetricsOut
+    # Richer validation detail so metrics clearly tally with the real benchmark.
+    per_defect_type: Dict[str, Dict] = Field(default_factory=dict)
+    baseline_rule: Optional[ClassificationMetricsOut] = None
+    dataset_source: str = ""
     caveats: List[str]
-
-
-class LinkCheckRequest(BaseModel):
-    url: str
-
-
-class LinkCheckResponse(BaseModel):
-    url: str
-    reachable: bool
-    extracted_name: Optional[str] = None
-    extracted_price: Optional[float] = None
-    note: str
-    # When the fetch yields enough to analyse, we include a scan; otherwise scan is None
-    # and the note explains why (keeping the prototype honest, never fabricating data).
-    scan: Optional[ScanResponse] = None
 
 
 class ProductSummary(BaseModel):
@@ -124,3 +132,44 @@ class ProductSummary(BaseModel):
     currency: str
     platform: str
     image_hint: str
+    colour: str = ""
+    style: str = ""
+    in_stock: bool = True
+
+
+# ---- Personalization (feature #3) ----
+class PreferencesIn(BaseModel):
+    preferred_style: str = Field(default="", max_length=40)
+    favourite_colour: str = Field(default="", max_length=40)
+    monthly_budget: float = Field(default=0, ge=0, le=100000)
+
+
+class PreferencesOut(BaseModel):
+    preferred_style: str
+    favourite_colour: str
+    monthly_budget: float
+
+
+# ---- Wishlist (feature #4) ----
+class WishlistAddIn(BaseModel):
+    product_id: str = Field(min_length=1, max_length=120)
+    notify_on_restock: bool = False
+
+
+class WishlistItemOut(BaseModel):
+    product: ProductSummary
+    notify_on_restock: bool
+    in_stock: bool
+    added_at: str
+
+
+# ---- Paste-a-link (emulated) ----
+class LinkCheckRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class LinkCheckResponse(BaseModel):
+    platform: str
+    matched: bool          # True = exact demo-link match; False = emulated/mapped result
+    note: str
+    scan: ScanResponse

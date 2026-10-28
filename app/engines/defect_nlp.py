@@ -24,34 +24,52 @@ from typing import Dict, List
 # Terms are matched on normalized text (lowercased, accent-stripped).
 # ---------------------------------------------------------------------------
 DEFECT_LEXICON: Dict[str, List[tuple[str, float]]] = {
+    # Durability / stitching failures (benchmark type: "Stitching Defect").
     "durability": [
         ("cepat rosak", 0.9), ("mudah rosak", 0.9), ("rosak", 0.6),
-        ("koyak", 0.85), ("tercabut", 0.8), ("terburai", 0.85),
-        ("jahitan terurai", 0.9), ("longgar", 0.5), ("patah", 0.8),
+        ("koyak", 0.85), ("tercabut", 0.8), ("terburai", 0.85), ("terurai", 0.8),
+        ("jahitan terurai", 0.9), ("jahitan terbuka", 0.9), ("jahitan senget", 0.85),
+        ("benang terkeluar", 0.85), ("loose thread", 0.8), ("poor stitching", 0.85),
+        ("longgar", 0.5), ("patah", 0.8),
         ("broke after", 0.95), ("fell apart", 0.95), ("ripped", 0.85),
         ("tore", 0.85), ("stitching came", 0.9), ("came undone", 0.8),
         ("stopped working", 0.8), ("after 2 wears", 0.9), ("after one wash", 0.9),
         ("luntur", 0.7), ("faded", 0.7), ("color bleed", 0.75), ("warna tanggal", 0.75),
     ],
+    # Material quality + sheerness (benchmark type: "Fabric Sheerness").
     "material": [
         ("kain nipis", 0.85), ("gila nipis", 0.9), ("nipis", 0.6),
-        ("kain panas", 0.6), ("panas", 0.4), ("murahan", 0.7),
-        ("kualiti rendah", 0.8), ("kualiti teruk", 0.85), ("quality teruk", 0.85),
-        ("cheap material", 0.8), ("thin material", 0.8), ("see through", 0.75),
-        ("jarang", 0.6), ("kasar", 0.5), ("gatal", 0.55), ("itchy", 0.55),
-        ("plastik", 0.5), ("flimsy", 0.8), ("feels cheap", 0.8),
+        ("kain jarang", 0.8), ("jarang", 0.55), ("nampak inner", 0.85),
+        ("nampak bra", 0.85), ("transparent", 0.8), ("see through", 0.8),
+        ("see-through", 0.8), ("tak breathable", 0.75),
+        ("murahan", 0.7), ("kualiti rendah", 0.8), ("kualiti teruk", 0.85),
+        ("quality teruk", 0.85), ("cheap material", 0.8), ("thin material", 0.8),
+        ("kasar", 0.5), ("gatal", 0.55), ("itchy", 0.55),
+        ("plastik", 0.6), ("macam plastik", 0.75), ("flimsy", 0.8), ("feels cheap", 0.8),
     ],
+    # Sizing / fit (benchmark type: "Sizing Mismatch").
     "sizing": [
-        ("tak muat", 0.6), ("ketat", 0.5), ("sempit", 0.5), ("kebesaran", 0.5),
-        ("kekecilan", 0.6), ("saiz tak kena", 0.6), ("too small", 0.5),
-        ("too big", 0.5), ("runs small", 0.5), ("sizing off", 0.6),
+        ("tak muat", 0.6), ("ketat", 0.6), ("sempit", 0.5), ("kebesaran", 0.5),
+        ("kekecilan", 0.6), ("saiz tak kena", 0.6), ("tak ngam", 0.6),
+        ("cutting kecil", 0.7), ("kecil gila", 0.75), ("terlalu kecil", 0.7),
+        ("fit macam", 0.6), ("tak ikut size chart", 0.75), ("cannot wear", 0.7),
+        ("too small", 0.5), ("too big", 0.5), ("runs small", 0.6), ("sizing off", 0.6),
         ("kecut", 0.7), ("shrunk", 0.75), ("mengecut", 0.7),
     ],
+    # Thermal comfort (benchmark type: "Thermal Discomfort").
+    "thermal": [
+        ("kain panas", 0.7), ("material panas", 0.75), ("panas sangat", 0.8),
+        ("panas gila", 0.8), ("memerangkap haba", 0.8),
+        ("tak serap peluh", 0.75), ("melekit", 0.7), ("rimas", 0.65),
+        ("not breathable", 0.75),
+    ],
+    # Value / regret language.
     "value": [
         ("tak berbaloi", 0.85), ("x berbaloi", 0.85), ("rugi", 0.75),
         ("menyesal", 0.8), ("regret", 0.8), ("waste of money", 0.9),
         ("buang duit", 0.85), ("tak worth", 0.8), ("not worth", 0.8),
-        ("tipu", 0.8), ("scam", 0.9), ("menipu", 0.85), ("different from picture", 0.7),
+        ("tak puas hati", 0.7), ("tipu", 0.8), ("scam", 0.9),
+        ("menipu", 0.85), ("different from picture", 0.7),
         ("lain dari gambar", 0.7), ("tak sama gambar", 0.7),
     ],
 }
