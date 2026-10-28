@@ -20,6 +20,41 @@ function ring(v, label, inv = false) {
     <div class="mid"><div class="n" style="color:${col}">${v.toFixed(0)}</div><div class="k">${label}</div></div></div>`;
 }
 async function getJSON(url) { const r = await fetch(url); if (!r.ok) throw new Error("Request failed"); return r.json(); }
+
+// Gompertz instantaneous-interest curve from fitted params {a,b,c}, drawn as an SVG timeline.
+// Marks "now" (current day) and the "stale" line so the trend-decay story is visible.
+function gompertzTimeline(hype) {
+  const fp = hype.fitted_params || {};
+  const a = fp.a, b = fp.b, c = fp.c;
+  if (a == null || b == null || c == null || c === 0) {
+    return '<div class="hint">Not enough trend history to chart.</div>';
+  }
+  const W = 520, H = 120, pad = 6;
+  const horizon = Math.max(hype.current_day + 14, (hype.peak_day || 0) + 14, 20);
+  const inst = t => a * b * c * Math.exp(-c * t) * Math.exp(-b * Math.exp(-c * t));
+  const N = 80, pts = [];
+  let peak = 1e-9;
+  for (let i = 0; i <= N; i++) { const t = (i / N) * horizon; const y = inst(t); pts.push([t, y]); if (y > peak) peak = y; }
+  const x = t => pad + (t / horizon) * (W - 2 * pad);
+  const y = v => H - pad - (v / peak) * (H - 2 * pad);
+  const path = pts.map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1)).join(" ");
+  const area = path + ` L ${x(horizon).toFixed(1)} ${H - pad} L ${x(0).toFixed(1)} ${H - pad} Z`;
+  const nowX = x(hype.current_day);
+  const peakX = x(hype.peak_day || 0);
+  const staleY = y(0.25 * peak);          // the "stale" threshold line (25% of peak)
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="120" preserveAspectRatio="none" style="display:block">
+    <defs><linearGradient id="tl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgba(79,124,255,.45)"/><stop offset="1" stop-color="rgba(79,124,255,0)"/></linearGradient></defs>
+    <path d="${area}" fill="url(#tl)"/>
+    <path d="${path}" fill="none" stroke="#4f7cff" stroke-width="2"/>
+    <line x1="${pad}" y1="${staleY.toFixed(1)}" x2="${W - pad}" y2="${staleY.toFixed(1)}" stroke="rgba(251,113,133,.5)" stroke-width="1" stroke-dasharray="4 4"/>
+    <line x1="${nowX.toFixed(1)}" y1="${pad}" x2="${nowX.toFixed(1)}" y2="${H - pad}" stroke="var(--brand1)" stroke-width="1.5"/>
+    <circle cx="${peakX.toFixed(1)}" cy="${y(peak).toFixed(1)}" r="3" fill="#7c5cff"/>
+  </svg>
+  <div class="kv" style="margin-top:6px"><span>■ peak day ${(hype.peak_day||0).toFixed(1)}</span>
+    <span style="color:var(--brand1)">│ now (day ${hype.current_day})</span>
+    <span style="color:#fca5b5">- - stale line</span></div>`;
+}
 async function postJSON(url, body) {
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Request failed");
@@ -113,16 +148,26 @@ function show(d, link) {
   const tags = (df.top_defects || []).slice(0, 5).map(x => `<span class="tag">${esc(x.phrase)}</span>`).join("") || '<span class="kv">No defect phrases detected</span>';
   const persona = d.personalized_note ? `<div class="persona">${esc(d.personalized_note)}</div>` : "";
   const canWish = !!d.product_id;
-  const alt = d.alternative ? `
+  let alt = "";
+  if (d.alternative) {
+    const a = d.alternative;
+    const priceLine = a.discount_pct
+      ? `<span style="text-decoration:line-through;color:var(--faint)">${a.currency}${a.price.toFixed(2)}</span>
+         <b style="color:var(--good);margin-left:6px">${a.currency}${a.discounted_price.toFixed(2)}</b>
+         <span class="soon" style="margin-left:6px">-${a.discount_pct}% partner (demo)</span>`
+      : `${a.currency}${a.price.toFixed(2)}`;
+    alt = `
     <div class="card glass" style="margin-top:14px;border:1px solid rgba(45,212,191,.35)">
       <div class="cap" style="color:var(--brand1);font-size:11px;letter-spacing:1px;text-transform:uppercase">Better alternative</div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px">
-        <div><div style="font-weight:650;font-size:15px">${esc(d.alternative.name)}</div>
-          <div class="hint" style="margin:4px 0 0">${esc(d.alternative.reason)}</div></div>
-        <div style="text-align:right"><span class="pill ${d.alternative.recommendation}">${d.alternative.recommendation}</span>
-          <div class="hint" style="margin-top:6px">${d.alternative.currency}${d.alternative.price.toFixed(2)} · longevity ${d.alternative.longevity_score.toFixed(0)}</div></div>
-        <button class="soft mini" id="altScan" data-id="${d.alternative.product_id}">Analyse it</button>
-      </div></div>` : "";
+        <div><div style="font-weight:650;font-size:15px">${esc(a.name)}</div>
+          <div class="hint" style="margin:4px 0 0">${esc(a.reason)}</div>
+          <div style="margin-top:6px;font-size:13px">${priceLine}</div></div>
+        <div style="text-align:right"><span class="pill ${a.recommendation}">${a.recommendation}</span>
+          <div class="hint" style="margin-top:6px">longevity ${a.longevity_score.toFixed(0)} · ${a.currency}${a.cost_per_wear.toFixed(2)}/wear</div></div>
+        <button class="soft mini" id="altScan" data-id="${a.product_id}">Analyse it</button>
+      </div></div>`;
+  }
   const banner = (link && !link.matched)
     ? `<div class="glass note" style="border-left-color:var(--warn);margin:0 0 14px"><b>Emulated demo result</b><p style="margin:6px 0 0">${esc(link.note)}</p></div>` : "";
   $("#result").innerHTML = `${banner}
@@ -158,17 +203,53 @@ function show(d, link) {
         <div class="kv"><span>Expected wears</span><b>${tc.expected_wears}</b></div>
         <div class="kv"><span>Benchmark</span><b>${tc.currency}${tc.benchmark_cpw.toFixed(2)}</b></div></div>
     </div>
-    <div class="card glass" style="margin-top:14px"><h3>How the longevity score was composed</h3>
-      <p class="hint" style="margin-top:6px">${esc(d.how_we_calculated)}</p>
-      <table><tr><th>Signal</th><th>Health</th><th>Weight</th><th>Points</th></tr>
-        ${d.score_breakdown.map(s => `<tr><td>${esc(s.signal)}</td><td>${s.health}/100</td><td>${(s.weight * 100).toFixed(0)}%</td><td><b>${s.points}</b></td></tr>`).join("")}
-      </table></div>
+    <details class="card glass" style="margin-top:14px" open>
+      <summary style="cursor:pointer;font-weight:650;font-size:15px;list-style:none">
+        ▸ How the longevity score was composed <span class="hint" style="font-weight:400">(tap to expand/collapse)</span></summary>
+      <div style="margin-top:12px">
+        <p class="hint">${esc(d.how_we_calculated)}</p>
+        <table><tr><th>Signal</th><th>Health</th><th>Weight</th><th>Points</th></tr>
+          ${d.score_breakdown.map(s => `<tr><td>${esc(s.signal)}</td><td>${s.health}/100</td><td>${(s.weight * 100).toFixed(0)}%</td><td><b>${s.points}</b></td></tr>`).join("")}
+          <tr><td style="color:var(--brand1)"><b>Longevity score</b></td><td></td><td></td><td><b style="color:var(--brand1)">${d.longevity_score.toFixed(0)}</b></td></tr>
+        </table>
+        <div class="cap" style="margin-top:16px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Gompertz trend-decay timeline</div>
+        <div style="margin-top:8px">${gompertzTimeline(h)}</div>
+      </div>
+    </details>
     ${alt}
     <div class="glass note"><b>Responsible use</b><ul>${d.disclaimers.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
   $("#addCompare").addEventListener("click", () => { addCompare(d); });
   if (canWish) $("#addWish").addEventListener("click", () => addWish(d.product_id));
   $("#altScan")?.addEventListener("click", (e) => scanById(e.target.dataset.id));
   $("#result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// Category Risk Heatmap — avg regret risk per category across the user's scan history.
+// Each cell is coloured from green (low risk) to red (high risk), with the count of items.
+function categoryHeatmap(h) {
+  const byCat = {};
+  h.forEach(x => {
+    const c = x.category || "other";
+    (byCat[c] = byCat[c] || { regret: 0, n: 0, avoid: 0 });
+    byCat[c].regret += x.regret; byCat[c].n += 1;
+    if (x.recommendation === "AVOID" || x.recommendation === "CAUTION") byCat[c].avoid += 1;
+  });
+  const cats = Object.entries(byCat).sort((a, b) => (b[1].regret / b[1].n) - (a[1].regret / a[1].n));
+  if (!cats.length) return "";
+  const cell = (c, d) => {
+    const avg = d.regret / d.n;
+    // Green (0% regret) -> red (100% regret).
+    const hue = Math.round(140 - (avg / 100) * 140);   // 140=green, 0=red
+    const bg = `hsla(${hue},70%,45%,0.28)`, border = `hsla(${hue},70%,55%,0.6)`;
+    return `<div style="flex:1;min-width:120px;background:${bg};border:1px solid ${border};
+      border-radius:12px;padding:14px">
+      <div style="font-weight:650;text-transform:capitalize">${esc(c)}</div>
+      <div style="font-size:26px;font-weight:800;margin:4px 0">${avg.toFixed(0)}%</div>
+      <div class="hint">avg regret · ${d.n} item${d.n > 1 ? "s" : ""} · ${d.avoid} flagged</div></div>`;
+  };
+  return `<div class="card glass" style="margin-top:14px"><h3>Category risk heatmap</h3>
+    <p class="hint" style="margin-top:4px">Average regret risk per category from the items you've analysed. Redder = riskier to buy in that category.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">${cats.map(([c, d]) => cell(c, d)).join("")}</div></div>`;
 }
 
 /* ---- Dashboard ---- */
@@ -211,7 +292,7 @@ function pageDashboard(view) {
         <div class="kv"><span>Items beating benchmark</span><b>${h.filter(x => x.cpw <= 0.8).length} / ${n}</b></div>
         <div class="row" style="margin-top:12px"><button class="ghost mini" id="exportBtn">Export my data</button>
           <button class="ghost mini" id="clearBtn">Clear history</button></div></div>
-    </div>`;
+    </div>` + categoryHeatmap(h);
   }
   view.innerHTML = head("Private analytics", "Your insight dashboard",
     "A live view of what you've analysed. This history is stored only in your browser.") + body + footer();

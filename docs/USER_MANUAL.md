@@ -157,14 +157,53 @@ Expected result: **`49 passed`**.
 
 ---
 
-## 9. Install it on your phone (optional)
+## 9. Install it on your phone via Cloudflare HTTPS (the "web app")
 
-The app is a Progressive Web App (PWA) — it can be installed like a real app.
-- **Same Wi-Fi, quick look:** `powershell -ExecutionPolicy Bypass -File scripts/run_mobile.ps1`
-  then open the printed `http://<your-PC-IP>:8000` on your phone.
-- **Installable (needs HTTPS):** `powershell -ExecutionPolicy Bypass -File scripts/run_tunnel.ps1`
-  to get a temporary `https://...` link; open it on your phone and choose
-  "Add to Home screen" / "Install app".
+The app is a Progressive Web App (PWA) — it can be installed like a real app. But phones only
+allow true install over **HTTPS**, and your local server is plain HTTP. The free **Cloudflare
+Tunnel** gives you a public `https://...` address that forwards to your local app — no Cloudflare
+account, no DNS setup, no cost. (The `cloudflared.exe` binary already ships in `tools/`.)
+
+### Step by step
+
+1. **Start the app** (Terminal A):
+   ```powershell
+   python -m uvicorn app.main:app --port 8000
+   ```
+
+2. **Start the tunnel** (Terminal B — leave Terminal A running):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts/run_tunnel.ps1
+   ```
+   If your app is on a different port, pass it: `... run_tunnel.ps1 -Port 8010`
+
+3. **Copy the HTTPS link** the tunnel prints, e.g.:
+   ```
+   https://nose-easy-gale-day.trycloudflare.com
+   ```
+
+4. **Open that link on your phone** (any browser). Then install it:
+   - **Android / Chrome:** menu (⋮) → *Add to Home screen* / *Install app*
+   - **iPhone / Safari:** Share → *Add to Home Screen*
+
+   You now have a De-Influence app icon that opens full-screen and works offline.
+
+5. **To stop:** press **Ctrl + C** in Terminal B (tunnel), then in Terminal A (app).
+
+### Raw command (if you skip the script)
+```powershell
+.\tools\cloudflared.exe tunnel --url http://localhost:8000
+```
+
+### Good to know
+- The `trycloudflare.com` URL is **random and temporary** — it changes every run, which is fine
+  for a demo. For a fixed URL (e.g. judging day), deploy to any free HTTPS host
+  (Render, Railway, Fly.io) or set up a *named* Cloudflare tunnel with a Cloudflare account.
+- The tunnel only exposes the app while it is running on your machine; close it and the link dies.
+- Same-Wi-Fi quick look without install (no HTTPS):
+  `powershell -ExecutionPolicy Bypass -File scripts/run_mobile.ps1`, then open the printed
+  `http://<your-PC-IP>:8000` on your phone (loads, but the phone offers only a shortcut, not a
+  real install).
 
 ---
 

@@ -10,6 +10,7 @@ feature, shown as "coming soon").
 """
 from __future__ import annotations
 
+import mimetypes
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,6 +19,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+# Some Windows installs register .js / .css as text/plain in the system registry, which makes
+# browsers refuse to run our scripts ("MIME type ('text/plain') is not executable"). Force the
+# correct types so StaticFiles always serves them with an executable/stylable content type.
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 from . import db, debug
 from .data.benchmark import BENCHMARK_PATH, load_benchmark
@@ -132,11 +141,19 @@ def _find_alternative(scanned: dict, verdict) -> "AlternativeOut | None":
         return None
     same_cat = best["category"] == scanned.get("category", "")
     where = "in the same category" if same_cat else "from our durable picks"
+
+    # Illustrative "partner discount" (demo only — we have no real affiliate partners yet).
+    # Shows how the business model would nudge users toward durable staples. Flagged in the UI.
+    discount_pct = 10
+    orig_price = round(float(best["price"]), 2)
+    discounted_price = round(orig_price * (1 - discount_pct / 100.0), 2)
+
     return AlternativeOut(
         product_id=best["id"], name=best["name"], category=best["category"],
-        price=best["price"], currency=best["currency"], platform=best["platform"],
+        price=orig_price, currency=best["currency"], platform=best["platform"],
         longevity_score=best_v.longevity_score, recommendation=best_v.recommendation,
         cost_per_wear=best_tc.cost_per_wear,
+        discount_pct=discount_pct, discounted_price=discounted_price, discount_is_demo=True,
         reason=(f"Scores {best_v.longevity_score:.0f} vs {verdict.longevity_score:.0f} on "
                 f"longevity at {best['currency']}{best_tc.cost_per_wear:.2f}/wear - a better keep "
                 f"{where}."),
@@ -370,6 +387,25 @@ def service_worker() -> FileResponse:
     if not sw.exists():
         raise HTTPException(status_code=404, detail="Service worker not found.")
     return FileResponse(sw, media_type="application/javascript")
+
+
+# Serve the core assets with explicit, pinned content types so they always load - never
+# subject to a mis-configured OS MIME registry (belt-and-suspenders alongside the mimetypes
+# fix above). Must be declared BEFORE the /static mount so they take precedence.
+@app.get("/static/app.js")
+def app_js() -> FileResponse:
+    f = STATIC_DIR / "app.js"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="app.js not found.")
+    return FileResponse(f, media_type="application/javascript")
+
+
+@app.get("/static/app.css")
+def app_css() -> FileResponse:
+    f = STATIC_DIR / "app.css"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="app.css not found.")
+    return FileResponse(f, media_type="text/css")
 
 
 if STATIC_DIR.exists():

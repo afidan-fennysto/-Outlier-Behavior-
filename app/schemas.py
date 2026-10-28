@@ -68,6 +68,10 @@ class AlternativeOut(BaseModel):
     longevity_score: float
     recommendation: str
     cost_per_wear: float
+    # Illustrative partner discount (demo only) to show the "nudge to a staple" business model.
+    discount_pct: int = 0
+    discounted_price: float = 0.0
+    discount_is_demo: bool = True
     reason: str
 
 

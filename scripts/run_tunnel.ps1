@@ -6,15 +6,22 @@
 # what lets the phone install it as a standalone app.
 #
 # This uses the official cloudflared.exe binary (a single self-contained file, no npm, no
-# account). The script downloads it to tools/cloudflared.exe the first time if it is missing.
+# Cloudflare account). The script downloads it to tools/cloudflared.exe the first time if missing.
 #
-# Usage:
+# Usage (defaults to port 8000):
 #   1. Terminal A:  python -m uvicorn app.main:app --port 8000
 #   2. Terminal B:  powershell -ExecutionPolicy Bypass -File scripts/run_tunnel.ps1
+#
+# If your app runs on another port (e.g. 8010 because 8000 was busy), pass it:
+#   powershell -ExecutionPolicy Bypass -File scripts/run_tunnel.ps1 -Port 8010
 #
 # Then watch terminal B for:  https://<random>.trycloudflare.com
 # Open THAT url on your phone, and install from the browser menu.
 # Ctrl+C in terminal B stops the tunnel.
+
+param(
+    [int]$Port = 8000
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -37,12 +44,12 @@ if (-not (Test-Path $exe)) {
 }
 
 Write-Host ""
-Write-Host "Starting a free HTTPS tunnel to http://localhost:8000 ..." -ForegroundColor Cyan
+Write-Host "Starting a free HTTPS tunnel to http://localhost:$Port ..." -ForegroundColor Cyan
 Write-Host "Make sure the app is running in another terminal:" -ForegroundColor Cyan
-Write-Host "    python -m uvicorn app.main:app --port 8000" -ForegroundColor Gray
+Write-Host "    python -m uvicorn app.main:app --port $Port" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Watch for a line like:  https://something-random.trycloudflare.com" -ForegroundColor Green
 Write-Host "Open that URL on your phone, then browser menu -> Add to Home screen / Install app." -ForegroundColor Green
 Write-Host ""
 
-& $exe tunnel --url http://localhost:8000
+& $exe tunnel --url "http://localhost:$Port"
