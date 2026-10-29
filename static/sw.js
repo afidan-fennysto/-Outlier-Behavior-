@@ -8,7 +8,7 @@
 //   * POSTs and cross-origin requests: pass straight through to the network.
 //
 // Bump CACHE whenever shell assets change so old caches are cleared on activate.
-const CACHE = "de-influence-v8";
+const CACHE = "de-influence-v10";
 
 const PRECACHE = [
   "/",

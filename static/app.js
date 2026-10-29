@@ -8,6 +8,10 @@ let LAST_SCAN = null;
 let DEBUG_ENABLED = false;
 
 /* ---------------- shared helpers ---------------- */
+// Old-browser-safe helpers (no optional chaining / Object.fromEntries) so the app also runs on
+// older Android WebViews such as feature/flip phones.
+function on(sel, ev, fn) { const el = $(sel); if (el) el.addEventListener(ev, fn); }
+function toObj(pairs) { const o = {}; pairs.forEach(p => { o[p[0]] = p[1]; }); return o; }
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function color(v, inv = false) { const s = inv ? 100 - v : v; return s >= 66 ? "var(--good)" : s >= 40 ? "var(--warn)" : "var(--bad)"; }
@@ -62,7 +66,7 @@ async function postJSON(url, body) {
 }
 
 /* ---------------- private local scan history ---------------- */
-function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; } }
+function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch (_e) { return []; } }
 function saveScan(d) {
   const h = loadHistory();
   h.unshift({ t: Date.now(), id: d.product_id, name: d.product_name, category: d.category,
@@ -124,7 +128,7 @@ async function loadDemos() {
     const items = await getJSON("/api/products");
     $("#demos").innerHTML = items.map(p => `<button class="chip-btn" data-id="${p.id}">${esc(p.name)}</button>`).join("");
     document.querySelectorAll("#demos .chip-btn").forEach(b => b.addEventListener("click", () => scanById(b.dataset.id)));
-  } catch { $("#demos").innerHTML = '<span class="hint">Demo list unavailable offline.</span>'; }
+  } catch (_e) { $("#demos").innerHTML = '<span class="hint">Demo list unavailable offline.</span>'; }
 }
 async function scanById(id) { busy(); try { show(await postJSON("/api/scan", { product_id: id })); } catch (e) { fail(e); } }
 async function scanLink() {
@@ -220,7 +224,7 @@ function show(d, link) {
     <div class="glass note"><b>Responsible use</b><ul>${d.disclaimers.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
   $("#addCompare").addEventListener("click", () => { addCompare(d); });
   if (canWish) $("#addWish").addEventListener("click", () => addWish(d.product_id));
-  $("#altScan")?.addEventListener("click", (e) => scanById(e.target.dataset.id));
+  on("#altScan", "click", (e) => scanById(e.target.dataset.id));
   $("#result").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -263,12 +267,12 @@ function pageDashboard(view) {
     const avgL = avg("longevity"), avgR = avg("regret"), avgC = avg("cpw");
     const avoided = h.filter(x => x.recommendation === "AVOID" || x.recommendation === "CAUTION").length;
     const recos = ["KEEP", "CONSIDER", "CAUTION", "AVOID"];
-    const rc = Object.fromEntries(recos.map(r => [r, h.filter(x => x.recommendation === r).length]));
+    const rc = toObj(recos.map(r => [r, h.filter(x => x.recommendation === r).length]));
     const rcol = { KEEP: "var(--good)", CONSIDER: "var(--warn)", CAUTION: "#fb923c", AVOID: "var(--bad)" };
     const catCount = {}; h.forEach(x => (x.defects || []).forEach(c => catCount[c] = (catCount[c] || 0) + 1));
     const cats = Object.entries(catCount).sort((a, b) => b[1] - a[1]).slice(0, 5); const cmax = cats.length ? cats[0][1] : 1;
     const phases = ["rising", "cresting", "decaying", "stale"];
-    const pc = Object.fromEntries(phases.map(p => [p, h.filter(x => x.phase === p).length])); const pmax = Math.max(1, ...Object.values(pc));
+    const pc = toObj(phases.map(p => [p, h.filter(x => x.phase === p).length])); const pmax = Math.max(1, ...Object.values(pc));
     body = `<div class="grid4">
       <div class="card glass stat"><div class="big">${n}</div><div class="cap">Items analysed</div></div>
       <div class="card glass stat"><div class="big" style="color:${color(avgL)}">${avgL.toFixed(0)}</div><div class="cap">Avg longevity</div></div>
@@ -296,8 +300,8 @@ function pageDashboard(view) {
   }
   view.innerHTML = head("Private analytics", "Your insight dashboard",
     "A live view of what you've analysed. This history is stored only in your browser.") + body + footer();
-  $("#clearBtn")?.addEventListener("click", () => { if (confirm("Clear your local scan history?")) { clearHistory(); route(); } });
-  $("#exportBtn")?.addEventListener("click", () => {
+  on("#clearBtn", "click", () => { if (confirm("Clear your local scan history?")) { clearHistory(); route(); } });
+  on("#exportBtn", "click", () => {
     const b = new Blob([JSON.stringify(loadHistory(), null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "de-influence-history.json"; a.click(); URL.revokeObjectURL(a.href);
   });
@@ -316,7 +320,7 @@ async function pagePersonalize(view) {
     </div>` + footer();
   try { const p = await getJSON("/api/preferences");
     $("#pStyle").value = p.preferred_style || ""; $("#pColour").value = p.favourite_colour || "";
-    if (p.monthly_budget) $("#pBudget").value = p.monthly_budget; } catch {}
+    if (p.monthly_budget) $("#pBudget").value = p.monthly_budget; } catch (_e) {}
   $("#savePrefs").addEventListener("click", async () => {
     try { await postJSON("/api/preferences", { preferred_style: $("#pStyle").value.trim(),
       favourite_colour: $("#pColour").value.trim(), monthly_budget: parseFloat($("#pBudget").value || "0") });
@@ -349,7 +353,7 @@ function pageCompare(view) {
   }
   view.innerHTML = head("Side by side", "Compare items",
     "Line up two or more analysed items to see which is the smarter buy.") + body + footer();
-  $("#cmpClear")?.addEventListener("click", () => { COMPARE.clear(); route(); });
+  on("#cmpClear", "click", () => { COMPARE.clear(); route(); });
 }
 
 /* ---- Wishlist ---- */
@@ -374,7 +378,7 @@ async function renderWishlist() {
     el.querySelectorAll("button[data-id]").forEach(b => b.addEventListener("click", async () => {
       await fetch("/api/wishlist/" + encodeURIComponent(b.dataset.id), { method: "DELETE" }); renderWishlist();
     }));
-  } catch { el.innerHTML = '<div class="glass empty">Wishlist unavailable offline.</div>'; }
+  } catch (_e) { el.innerHTML = '<div class="glass empty">Wishlist unavailable offline.</div>'; }
 }
 
 /* ---- Why us ---- */
@@ -392,7 +396,7 @@ async function pageWhy(view) {
         <table><tr><th>Capability</th>${order.map(k => `<th${k === "deinfluence" ? ' class="me" style="color:var(--brand1)"' : ""}>${esc(cols[k])}</th>`).join("")}</tr>
           ${v.comparison.map(r => `<tr><td style="color:var(--muted)">${esc(r.capability)}</td>${order.map(k => mark(r[k])).join("")}</tr>`).join("")}
         </table></div>`;
-  } catch { $("#positioning").innerHTML = '<div class="glass empty">Positioning unavailable offline.</div>'; }
+  } catch (_e) { $("#positioning").innerHTML = '<div class="glass empty">Positioning unavailable offline.</div>'; }
 }
 
 /* ---- Validation ---- */
@@ -429,7 +433,7 @@ async function pageValidation(view) {
           ${rows.map(r => `<tr><td>${r.id}</td><td>${esc(r.review_text)}</td><td>${r.human_label}</td><td>${esc(r.defect_type)}</td><td>${r.rule_prediction}</td></tr>`).join("")}
         </table></div></div>
       <div class="glass note"><b>Honest limitations</b><ul>${v.caveats.map(c => `<li>${esc(c)}</li>`).join("")}</ul></div>`;
-  } catch { $("#validation").innerHTML = '<div class="glass empty">Validation metrics unavailable offline.</div>'; }
+  } catch (_e) { $("#validation").innerHTML = '<div class="glass empty">Validation metrics unavailable offline.</div>'; }
 }
 
 /* ---- Debug (only when server has DEINFLUENCE_DEBUG=1) ---- */
@@ -444,7 +448,7 @@ async function pageDebug(view) {
       <div class="card glass" style="margin-top:14px"><h3>${name} <span class="hint" style="font-size:12px">(${t.row_count} rows)</span></h3>
         <div class="scroll-x" style="max-height:300px;overflow-y:auto"><table class="mono">
           <tr>${t.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr>
-          ${t.rows.map(r => `<tr>${t.columns.map(c => `<td>${esc(String(r[c] ?? ""))}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${t.columns.length}" class="hint">empty</td></tr>`}
+          ${t.rows.map(r => `<tr>${t.columns.map(c => `<td>${esc(String(r[c] == null ? "" : r[c]))}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${t.columns.length}" class="hint">empty</td></tr>`}
         </table></div></div>`).join("");
     $("#dbg").innerHTML = `
       <div class="card glass"><h3>Database</h3>
@@ -485,7 +489,7 @@ function setNet() { const on = navigator.onLine; $("#netDot").className = "dot" 
 
 /* ---- boot ---- */
 async function boot() {
-  try { const h = await getJSON("/api/health"); DEBUG_ENABLED = !!h.debug_enabled; } catch {}
+  try { const h = await getJSON("/api/health"); DEBUG_ENABLED = !!h.debug_enabled; } catch (_e) {}
   setNet();
   window.addEventListener("online", setNet);
   window.addEventListener("offline", setNet);

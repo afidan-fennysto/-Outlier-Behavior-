@@ -30,7 +30,15 @@
   </div>
 </header>
 
-<main class="wrap" id="view"></main>
+<main class="wrap" id="view">
+  <!-- Shown only if app.js cannot run (very old browsers / JS disabled). app.js replaces it. -->
+  <div class="card glass" style="margin-top:20px">
+    <h3>Loading De-Influence AI…</h3>
+    <p class="hint">If this message stays, your browser may be too old to run the app.
+      Try Chrome or update Android System WebView.</p>
+  </div>
+</main>
+<noscript><p style="padding:20px">Please enable JavaScript to use De-Influence AI.</p></noscript>
 
 <div class="glass toast" id="toast"></div>
 
